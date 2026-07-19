@@ -8,8 +8,10 @@ import importlib.metadata
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,14 +22,15 @@ import structlog
 
 from src.common.logging import LogEvent, configure_logging, get_logger
 
-DEPENDENCIES = (
-    "structlog",
-    "torch",
-    "torchvision",
-    "onnx",
-    "onnxruntime",
-    "open-clip-torch",
-)
+DEPENDENCIES: dict[str, str] = {
+    "project": "ml-engineer-challenge",
+    "structlog": "structlog",
+    "torch": "torch",
+    "torchvision": "torchvision",
+    "onnx": "onnx",
+    "onnxruntime": "onnxruntime",
+    "open_clip_torch": "open-clip-torch",
+}
 
 
 class _CudaApi(Protocol):
@@ -35,9 +38,17 @@ class _CudaApi(Protocol):
 
     def device_count(self) -> int: ...
 
+    def get_device_name(self, device: int) -> str: ...
+
+
+class _TorchVersionApi(Protocol):
+    cuda: str | None
+
 
 class _TorchModule(Protocol):
+    __version__: str
     cuda: _CudaApi
+    version: _TorchVersionApi
 
 
 class _OnnxRuntimeModule(Protocol):
@@ -78,27 +89,82 @@ def _optional_module(name: str) -> ModuleType | None:
         return None
 
 
-def _collect_cuda_information() -> dict[str, object]:
+def _collect_torch_and_gpu_information() -> tuple[dict[str, object], dict[str, object]]:
     module = _optional_module("torch")
     if module is None:
-        return {"available": False, "device_count": 0, "torch_installed": False}
+        return (
+            {
+                "installed": False,
+                "version": None,
+                "cuda_available": False,
+                "cuda_version": None,
+            },
+            {"name": None, "device_count": 0},
+        )
 
     torch = cast(_TorchModule, module)
-    available = bool(torch.cuda.is_available())
-    return {
-        "available": available,
-        "device_count": int(torch.cuda.device_count()) if available else 0,
-        "torch_installed": True,
-    }
+    cuda_available = bool(torch.cuda.is_available())
+    device_count = int(torch.cuda.device_count()) if cuda_available else 0
+    gpu_name = torch.cuda.get_device_name(0) if cuda_available and device_count else None
+    return (
+        {
+            "installed": True,
+            "version": str(torch.__version__),
+            "cuda_available": cuda_available,
+            "cuda_version": torch.version.cuda,
+        },
+        {"name": gpu_name, "device_count": device_count},
+    )
 
 
 def _collect_onnx_provider_information() -> dict[str, object]:
     module = _optional_module("onnxruntime")
     if module is None:
-        return {"installed": False, "providers": []}
+        return {"installed": False, "version": None, "available_providers": []}
 
     onnxruntime = cast(_OnnxRuntimeModule, module)
-    return {"installed": True, "providers": onnxruntime.get_available_providers()}
+    return {
+        "installed": True,
+        "version": _distribution_version("onnxruntime"),
+        "available_providers": onnxruntime.get_available_providers(),
+    }
+
+
+def _path_status(path: Path, *, create: bool) -> dict[str, object]:
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
+
+    exists = path.is_dir()
+    writable = False
+    if exists:
+        try:
+            with tempfile.NamedTemporaryFile(prefix=".write-check-", dir=path):
+                writable = True
+        except OSError:
+            writable = False
+
+    return {"path": str(path), "exists": exists, "writable": writable}
+
+
+def _collect_path_information(repository_root: Path) -> dict[str, object]:
+    root = repository_root.resolve()
+    disk = shutil.disk_usage(root)
+    return {
+        "repository_root": _path_status(root, create=False),
+        "configs": _path_status(root / "configs", create=False),
+        "artifacts": _path_status(root / "artifacts", create=True),
+        "checkpoints": _path_status(root / "checkpoints", create=True),
+        "data": _path_status(root / "data", create=True),
+        "google_drive": {
+            "path": "/content/drive",
+            "mounted": Path("/content/drive").is_dir(),
+        },
+        "disk": {
+            "total_bytes": disk.total,
+            "used_bytes": disk.used,
+            "free_bytes": disk.free,
+        },
+    }
 
 
 def collect_environment_information(
@@ -106,53 +172,63 @@ def collect_environment_information(
     *,
     environment: str,
     git_sha: str,
+    repository_root: Path,
 ) -> dict[str, object]:
     """Collect safe runtime metadata without dumping environment variables."""
 
     python_information = {
         "version": platform.python_version(),
+        "major_minor": f"{sys.version_info.major}.{sys.version_info.minor}",
         "implementation": platform.python_implementation(),
         "executable": sys.executable,
-        "platform": platform.platform(),
     }
     logger.info(LogEvent.PYTHON_ENVIRONMENT_DETECTED, **python_information)
 
-    dependencies: dict[str, str | None] = {}
-    for dependency in DEPENDENCIES:
-        version = _distribution_version(dependency)
-        dependencies[dependency] = version
+    packages: dict[str, str | None] = {}
+    for package_name, distribution in DEPENDENCIES.items():
+        version = _distribution_version(distribution)
+        packages[package_name] = version
         logger.info(
             LogEvent.DEPENDENCY_CHECK_COMPLETED,
-            dependency=dependency,
+            dependency=package_name,
             installed=version is not None,
             version=version,
         )
 
-    cuda = _collect_cuda_information()
-    cuda_log = logger.info if cuda["available"] else logger.warning
+    torch, gpu = _collect_torch_and_gpu_information()
+    cuda_log = logger.info if torch["cuda_available"] else logger.warning
     cuda_log(
         LogEvent.CUDA_CHECK_COMPLETED,
-        cuda_available=cuda["available"],
-        device_count=cuda["device_count"],
-        fallback_device=None if cuda["available"] else "cpu",
+        cuda_available=torch["cuda_available"],
+        cuda_version=torch["cuda_version"],
+        device_count=gpu["device_count"],
+        gpu_name=gpu["name"],
+        fallback_device=None if torch["cuda_available"] else "cpu",
     )
 
     onnxruntime = _collect_onnx_provider_information()
     logger.info(
         LogEvent.ONNX_PROVIDER_CHECK_COMPLETED,
         installed=onnxruntime["installed"],
-        providers=onnxruntime["providers"],
+        providers=onnxruntime["available_providers"],
     )
 
     return {
         "schema_version": 1,
         "generated_at": _utc_timestamp(),
         "environment": environment,
-        "git_sha": git_sha,
+        "git": {"sha": git_sha},
         "python": python_information,
-        "dependencies": dependencies,
-        "cuda": cuda,
+        "platform": {
+            "system": platform.system(),
+            "release": platform.release(),
+            "architecture": platform.machine(),
+        },
+        "packages": packages,
+        "torch": torch,
+        "gpu": gpu,
         "onnxruntime": onnxruntime,
+        "paths": _collect_path_information(repository_root),
     }
 
 
@@ -174,6 +250,21 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=Path("artifacts/environment-local.json"),
         help="Path for the JSON environment report.",
     )
+    parser.add_argument(
+        "--environment",
+        help="Execution environment label; defaults to APP_ENV or local.",
+    )
+    parser.add_argument(
+        "--repository-root",
+        type=Path,
+        default=Path.cwd(),
+        help="Repository root whose required directories are checked.",
+    )
+    parser.add_argument(
+        "--require-cuda",
+        action="store_true",
+        help="Write the report, then fail when PyTorch cannot execute on CUDA.",
+    )
     return parser.parse_args(argv)
 
 
@@ -182,8 +273,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = _parse_args(argv)
     output_path = cast(Path, args.output)
+    repository_root = cast(Path, args.repository_root)
+    environment = cast(str | None, args.environment) or os.getenv("APP_ENV") or "local"
+    require_cuda = cast(bool, args.require_cuda)
     git_sha = _git_sha()
-    environment = os.getenv("APP_ENV", "local")
 
     configure_logging(
         service=os.getenv("SERVICE_NAME", "environment-report"),
@@ -199,6 +292,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             logger,
             environment=environment,
             git_sha=git_sha,
+            repository_root=repository_root,
         )
         try:
             _write_report(report, output_path)
@@ -210,11 +304,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             raise
 
+        torch_information = cast(dict[str, object], report["torch"])
+        cuda_available = cast(bool, torch_information["cuda_available"])
         logger.info(
             LogEvent.ENVIRONMENT_REPORT_WRITTEN,
             output_path=str(output_path),
-            cuda_available=cast(dict[str, object], report["cuda"])["available"],
+            cuda_available=cuda_available,
         )
+        if require_cuda and not cuda_available:
+            raise RuntimeError(
+                "CUDA is required but unavailable. In Colab select Runtime > "
+                "Change runtime type > GPU, then restart and rerun the notebook."
+            )
+
         logger.info(LogEvent.ENVIRONMENT_CHECK_COMPLETED, output_path=str(output_path))
     except Exception:
         logger.exception(

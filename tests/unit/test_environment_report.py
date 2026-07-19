@@ -1,4 +1,4 @@
-"""Unit tests for the first structured-logging consumer."""
+"""Unit tests for the shared local and Colab environment report."""
 
 from __future__ import annotations
 
@@ -24,27 +24,56 @@ def _events(captured: str) -> list[dict[str, object]]:
     return records
 
 
-def test_environment_report_writes_json_and_lifecycle_logs(
+def _mock_runtime_collectors(monkeypatch: pytest.MonkeyPatch, *, cuda: bool) -> None:
+    monkeypatch.setattr(
+        environment_report,
+        "_collect_torch_and_gpu_information",
+        lambda: (
+            {
+                "installed": True,
+                "version": "2.13.0",
+                "cuda_available": cuda,
+                "cuda_version": "13.0" if cuda else None,
+            },
+            {"name": "Test GPU" if cuda else None, "device_count": 1 if cuda else 0},
+        ),
+    )
+    monkeypatch.setattr(
+        environment_report,
+        "_collect_onnx_provider_information",
+        lambda: {
+            "installed": True,
+            "version": "1.27.0",
+            "available_providers": ["CPUExecutionProvider"],
+        },
+    )
+
+
+def test_environment_report_writes_stable_schema_and_lifecycle_logs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     output_path = tmp_path / "environment.json"
+    (tmp_path / "configs").mkdir()
     monkeypatch.setenv("LOG_FORMAT", "json")
-    monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setattr(environment_report, "_git_sha", lambda: "abc123")
-    monkeypatch.setattr(
-        environment_report,
-        "_collect_cuda_information",
-        lambda: {"available": False, "device_count": 0, "torch_installed": True},
-    )
-    monkeypatch.setattr(
-        environment_report,
-        "_collect_onnx_provider_information",
-        lambda: {"installed": True, "providers": ["CPUExecutionProvider"]},
-    )
+    _mock_runtime_collectors(monkeypatch, cuda=True)
 
-    assert environment_report.main(["--output", str(output_path)]) == 0
+    assert (
+        environment_report.main(
+            [
+                "--environment",
+                "colab",
+                "--require-cuda",
+                "--repository-root",
+                str(tmp_path),
+                "--output",
+                str(output_path),
+            ]
+        )
+        == 0
+    )
 
     report = cast(
         dict[str, object],
@@ -52,15 +81,53 @@ def test_environment_report_writes_json_and_lifecycle_logs(
     )
     records = _events(capsys.readouterr().out)
     event_names = [record["event"] for record in records]
+    git = cast(dict[str, object], report["git"])
+    torch = cast(dict[str, object], report["torch"])
+    paths = cast(dict[str, object], report["paths"])
+    artifacts = cast(dict[str, object], paths["artifacts"])
 
     assert report["schema_version"] == 1
-    assert report["environment"] == "test"
-    assert report["git_sha"] == "abc123"
+    assert report["environment"] == "colab"
+    assert git["sha"] == "abc123"
+    assert torch["cuda_available"] is True
+    assert artifacts["writable"] is True
+    assert (tmp_path / "checkpoints").is_dir()
+    assert (tmp_path / "data").is_dir()
     assert "environment_check_started" in event_names
     assert "cuda_check_completed" in event_names
     assert "environment_report_written" in event_names
     assert event_names[-1] == "environment_check_completed"
     assert records[0]["logger"] == "pipelines.environment_report"
+
+
+def test_require_cuda_writes_diagnostic_report_then_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output_path = tmp_path / "environment.json"
+    (tmp_path / "configs").mkdir()
+    monkeypatch.setenv("LOG_FORMAT", "json")
+    monkeypatch.setattr(environment_report, "_git_sha", lambda: "abc123")
+    _mock_runtime_collectors(monkeypatch, cuda=False)
+
+    with pytest.raises(RuntimeError, match="CUDA is required but unavailable"):
+        environment_report.main(
+            [
+                "--environment",
+                "colab",
+                "--require-cuda",
+                "--repository-root",
+                str(tmp_path),
+                "--output",
+                str(output_path),
+            ]
+        )
+
+    assert output_path.is_file()
+    records = _events(capsys.readouterr().out)
+    assert records[-1]["event"] == "environment_check_failed"
+    assert "CUDA is required" in cast(str, records[-1]["exception"])
 
 
 def test_environment_report_logs_write_failure(
@@ -71,21 +138,20 @@ def test_environment_report_logs_write_failure(
     parent_file = tmp_path / "not-a-directory"
     parent_file.write_text("occupied", encoding="utf-8")
     output_path = parent_file / "environment.json"
+    (tmp_path / "configs").mkdir()
     monkeypatch.setenv("LOG_FORMAT", "json")
     monkeypatch.setattr(environment_report, "_git_sha", lambda: "abc123")
-    monkeypatch.setattr(
-        environment_report,
-        "_collect_cuda_information",
-        lambda: {"available": False, "device_count": 0, "torch_installed": False},
-    )
-    monkeypatch.setattr(
-        environment_report,
-        "_collect_onnx_provider_information",
-        lambda: {"installed": False, "providers": []},
-    )
+    _mock_runtime_collectors(monkeypatch, cuda=False)
 
     with pytest.raises(OSError):
-        environment_report.main(["--output", str(output_path)])
+        environment_report.main(
+            [
+                "--repository-root",
+                str(tmp_path),
+                "--output",
+                str(output_path),
+            ]
+        )
 
     records = _events(capsys.readouterr().out)
     failed = [record for record in records if record["event"] == "environment_check_failed"]
@@ -132,34 +198,57 @@ def test_missing_distribution_and_module_are_reported_as_unavailable(
     assert environment_report._optional_module("not_installed") is None
 
 
-def test_optional_runtime_collectors_cover_available_and_missing_dependencies(
+def test_runtime_collectors_cover_available_and_missing_dependencies(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(environment_report, "_optional_module", lambda _name: None)
-    assert environment_report._collect_cuda_information() == {
-        "available": False,
-        "device_count": 0,
-        "torch_installed": False,
-    }
+    assert environment_report._collect_torch_and_gpu_information() == (
+        {
+            "installed": False,
+            "version": None,
+            "cuda_available": False,
+            "cuda_version": None,
+        },
+        {"name": None, "device_count": 0},
+    )
     assert environment_report._collect_onnx_provider_information() == {
         "installed": False,
-        "providers": [],
+        "version": None,
+        "available_providers": [],
     }
 
-    fake_cuda = SimpleNamespace(is_available=lambda: True, device_count=lambda: 2)
-    fake_torch = SimpleNamespace(cuda=fake_cuda)
+    fake_cuda = SimpleNamespace(
+        is_available=lambda: True,
+        device_count=lambda: 2,
+        get_device_name=lambda _device: "Test GPU",
+    )
+    fake_torch = SimpleNamespace(
+        cuda=fake_cuda,
+        version=SimpleNamespace(cuda="13.0"),
+        __version__="2.13.0",
+    )
     fake_onnxruntime = SimpleNamespace(
         get_available_providers=lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"]
     )
     modules = {"torch": fake_torch, "onnxruntime": fake_onnxruntime}
     monkeypatch.setattr(environment_report, "_optional_module", modules.__getitem__)
+    monkeypatch.setattr(
+        environment_report,
+        "_distribution_version",
+        lambda distribution: "1.27.0" if distribution == "onnxruntime" else None,
+    )
 
-    assert environment_report._collect_cuda_information() == {
-        "available": True,
-        "device_count": 2,
-        "torch_installed": True,
-    }
+    assert environment_report._collect_torch_and_gpu_information() == (
+        {
+            "installed": True,
+            "version": "2.13.0",
+            "cuda_available": True,
+            "cuda_version": "13.0",
+        },
+        {"name": "Test GPU", "device_count": 2},
+    )
     assert environment_report._collect_onnx_provider_information() == {
         "installed": True,
-        "providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        "version": "1.27.0",
+        "available_providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
     }
