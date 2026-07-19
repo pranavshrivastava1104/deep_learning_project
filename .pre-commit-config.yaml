@@ -1,0 +1,33 @@
+minimum_pre_commit_version: "4.6.0"
+default_install_hook_types:
+  - pre-commit
+  - pre-push
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --frozen --extra dev ruff check
+        language: system
+        types_or: [python, pyi]
+
+      - id: ruff-format-check
+        name: ruff format check
+        entry: uv run --frozen --extra dev ruff format --check
+        language: system
+        types_or: [python, pyi]
+
+      - id: mypy
+        name: mypy strict
+        entry: uv run --frozen --extra dev --extra model mypy
+        language: system
+        pass_filenames: false
+        types_or: [python, pyi]
+
+      - id: unit-tests
+        name: pytest unit
+        entry: uv run --frozen --extra dev --extra model pytest tests/unit -q
+        language: system
+        pass_filenames: false
+        stages: [pre-commit, pre-push]

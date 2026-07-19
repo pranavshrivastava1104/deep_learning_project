@@ -1,0 +1,12 @@
+name: ml-engineer-challenge
+
+# Reuse this environment anchor in future API and worker service definitions.
+x-logging-environment: &logging-environment
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: json
+  SERVICE_NAME: ${SERVICE_NAME:-ml-challenge}
+  APP_ENV: ${APP_ENV:-podman}
+  GIT_SHA: ${GIT_SHA:-unknown}
+
+# Container services and their SERVICE_NAME overrides are added in the infrastructure task.
+services: {}
