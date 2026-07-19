@@ -1,0 +1,52 @@
+schema_version: 1
+profile_name: gpu_onnx
+status: supported_portable_gpu
+
+serving:
+  application: fastapi
+  gateway: nginx
+  device: cuda
+  synchronous_deadline_seconds: 30
+
+runtime:
+  adapter: onnxruntime
+  execution_providers:
+    - CUDAExecutionProvider
+  require_cuda_provider_active: true
+  artifact_variant_preference:
+    - fp16
+    - fp32
+  int8_artifacts_allowed: false
+  int8_enablement_requires:
+    - explicitly_supported_execution_provider
+    - artifact_provider_gpu_validation
+    - quality_gate_passed
+    - performance_benefit_measured
+  model_bundle_root: artifacts/models
+  load_once_during_lifespan: true
+  warmup_before_readiness: true
+  bounded_concurrency: true
+  concurrency_limit: null
+  concurrency_limit_behavior: require_vram_and_load_benchmark
+
+fallback:
+  enabled: false
+  optional_target_profile: local_cpu
+  requires_explicit_enablement: true
+  same_task_model_version_preprocessing_and_postprocessing_required: true
+  semantic_model_change_allowed: false
+
+compatibility_record:
+  gpu_model: null
+  cuda_version: null
+  cudnn_version: null
+  onnxruntime_version: null
+  missing_values_behavior: block_champion_promotion
+
+promotion_requirements:
+  - checksum_verified
+  - manifest_schema_verified
+  - cuda_provider_verified
+  - gpu_parity_passed
+  - quality_gate_passed
+  - target_gpu_benchmark_recorded

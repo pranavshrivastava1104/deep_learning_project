@@ -1,0 +1,58 @@
+schema_version: 1
+profile_name: gpu_tensorrt
+status: target_specific_optimized_gpu
+
+serving:
+  application: fastapi
+  gateway: nginx
+  device: cuda
+  synchronous_deadline_seconds: 30
+
+runtime:
+  adapter: tensorrt
+  engine_file: model.plan
+  portable_source_artifact: model.onnx
+  precision_preference:
+    - int8_if_quality_gate_passed
+    - fp16
+  model_bundle_root: artifacts/models
+  load_once_during_lifespan: true
+  warmup_before_readiness: true
+  bounded_concurrency: true
+  initial_processes_per_gpu: 1
+  concurrency_limit: 1
+
+engine_build:
+  location: actual_deployment_gpu
+  colab_built_engine_is_deployable: false
+  rebuild_from_verified_onnx: true
+  record_build_flags: true
+  record_timing_cache_identity: true
+
+compatibility_record:
+  operating_system: null
+  platform_architecture: null
+  gpu_model: null
+  gpu_compute_capability: null
+  cuda_version: null
+  tensorrt_version: null
+  driver_version: null
+  build_flags: null
+  missing_or_mismatched_values_behavior: fail_readiness
+
+fallback:
+  enabled: true
+  target_profile: gpu_onnx
+  same_task_model_version_preprocessing_and_postprocessing_required: true
+  fallback_must_be_reported: true
+  semantic_model_change_allowed: false
+
+promotion_requirements:
+  - checksum_verified
+  - manifest_schema_verified
+  - engine_built_on_declared_target
+  - engine_load_test_passed
+  - tensorrt_parity_passed
+  - quality_gate_passed
+  - target_gpu_load_benchmark_passed
+  - rollback_bundle_retained

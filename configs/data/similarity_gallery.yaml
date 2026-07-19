@@ -1,0 +1,67 @@
+schema_version: 1
+dataset_name: similarity-gallery
+dataset_version: v1
+task: similarity
+seed: 42
+
+source:
+  provider: team_approved_inventory
+  inventory_uri: null
+  license_review_status: pending
+  acquisition_behavior_when_unverified: block_manifest_and_index_creation
+
+split_policy:
+  strategy: constrained_query_gallery_assignment
+  grouping:
+    deduplication_key: exact_content_group_id
+    relevance_key: relevance_group_id
+  assignment_order:
+    - isolate_exact_content_duplicates
+    - reserve_at_least_one_gallery_positive_per_test_query
+    - assign_remaining_relevance_groups_by_stable_hash
+  training:
+    use: not_used_for_initial_pretrained_encoder
+  validation:
+    fraction: 0.20
+  calibration:
+    fraction: 0.10
+  test_queries:
+    fraction: 0.20
+  gallery:
+    fraction: 0.50
+
+ground_truth:
+  format: explicit_positive_pairs
+  positive_pair_source: reviewed_labels
+  minimum_positives_per_query: 1
+  minimum_gallery_positives_per_test_query: 1
+  unresolved_query_behavior: exclude_and_report
+
+manifests:
+  directory: data/manifests/similarity-gallery/v1
+  training: null
+  training_manifest_behavior: not_generated_for_initial_pretrained_encoder
+  validation: validation.jsonl
+  calibration: calibration.jsonl
+  test_queries: test_queries.jsonl
+  gallery: gallery.jsonl
+  positive_pairs: positive_pairs.jsonl
+  include_fields:
+    - sample_id
+    - relative_path_or_object_uri
+    - exact_content_group_id
+    - relevance_group_id
+    - license_id
+    - retention_class
+    - sha256
+
+invariants:
+  require_disjoint_sample_ids: true
+  exact_content_must_not_cross_splits: true
+  every_test_query_requires_gallery_positive: true
+  minimum_gallery_positives_per_test_query: 1
+  require_disjoint_content_hashes: true
+  preserve_splits_between_experiments: true
+  calibration_must_not_use_test_queries: true
+  gallery_requires_approved_retention_class: true
+  user_inference_uploads_are_not_automatically_eligible: true

@@ -1,0 +1,97 @@
+schema_version: 1
+status: phase_00_accepted
+
+comparison_policy:
+  reference_artifact: pytorch_fp32
+  quality_deltas_are: absolute_metric_fraction
+  test_manifest_must_match: true
+  preprocessing_must_match: true
+  baseline_dependent_thresholds_may_be_null: true
+  null_threshold_behavior: block_promotion_until_measured
+
+classification:
+  primary_metric: top1_accuracy
+  secondary_metrics:
+    - top5_accuracy
+    - macro_f1
+    - expected_calibration_error
+  minimum_top1_accuracy: null
+  maximum_onnx_accuracy_drop: 0.01
+  maximum_int8_accuracy_drop: 0.02
+  require_per_class_analysis: true
+
+detection:
+  primary_metric: map_50_95
+  secondary_metrics:
+    - map_50
+    - map_75
+    - precision
+    - recall
+  minimum_map_50_95: null
+  maximum_onnx_map_drop: 0.01
+  maximum_int8_map_drop: 0.02
+  require_fixed_postprocessing_contract: true
+
+similarity:
+  primary_metric: recall_at_5
+  secondary_metrics:
+    - recall_at_1
+    - recall_at_10
+    - mean_reciprocal_rank
+  minimum_recall_at_5: null
+  maximum_onnx_recall_drop: 0.01
+  maximum_int8_recall_drop: 0.02
+  embedding_parity:
+    manifest: data/manifests/similarity-gallery/v1/test_queries.jsonl
+    aggregation: mean
+    gates:
+      onnx_fp32_vs_pytorch_fp32:
+        minimum_cosine_agreement: 0.999
+      onnx_fp16_vs_onnx_fp32:
+        minimum_cosine_agreement: null
+        null_threshold_behavior: block_fp16_promotion_until_measured
+      onnx_int8_vs_onnx_fp32:
+        minimum_cosine_agreement: null
+        null_threshold_behavior: block_int8_promotion_until_measured
+  require_version_consistent_index: true
+
+performance:
+  maximum_api_p95_ms: null
+  maximum_error_rate: 0.01
+  minimum_sync_availability: 0.999
+  latency_percentiles:
+    - p50
+    - p95
+    - p99
+  benchmark_requirements:
+    warmup_required: true
+    raw_measurements_required: true
+    model_only_and_end_to_end_required: true
+    hardware_and_runtime_identity_required: true
+    cuda_synchronization_required_for_gpu: true
+
+artifact_gates:
+  require_manifest_schema: true
+  require_sha256_for_every_artifact: true
+  require_preprocessing_contract: true
+  require_labels_or_category_metadata: true
+  require_model_card: true
+  require_license_review: true
+  require_golden_corpus_parity: true
+  require_finite_outputs: true
+
+promotion_gates:
+  candidate:
+    - offline_quality_passed
+    - artifact_integrity_passed
+    - runtime_parity_passed
+  challenger:
+    - candidate_gates_passed
+    - staging_integration_passed
+    - security_checks_passed
+    - performance_gate_passed
+  champion:
+    - challenger_gates_passed
+    - approval_recorded
+    - immutable_bundle_available
+    - rollback_bundle_retained

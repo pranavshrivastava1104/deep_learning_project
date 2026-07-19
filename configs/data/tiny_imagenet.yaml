@@ -1,0 +1,58 @@
+schema_version: 1
+dataset_name: tiny-imagenet
+dataset_version: v1
+task: classification
+seed: 42
+
+source:
+  provider: Stanford CS231n Tiny ImageNet challenge material
+  url: https://cs231n.stanford.edu/
+  archive_url: null
+  archive_sha256: null
+  license_review_status: pending
+  acquisition_behavior_when_unverified: block_download_and_redistribution
+
+split_policy:
+  strategy: source_aware_deterministic
+  stable_id: relative_image_path
+  hash_algorithm: sha256
+  stratification_key: class_id
+  training:
+    source: official_train
+    fraction_of_official_train: 0.90
+  validation:
+    source: official_train
+    fraction_of_official_train: 0.05
+  calibration:
+    source: official_train
+    fraction_of_official_train: 0.05
+  test:
+    source: official_validation_with_val_annotations
+    fraction: 1.0
+  official_unlabeled_test:
+    use: excluded_from_quality_gates
+
+manifests:
+  directory: data/manifests/tiny-imagenet/v1
+  training: train.jsonl
+  validation: validation.jsonl
+  calibration: calibration.jsonl
+  test: test.jsonl
+  include_fields:
+    - sample_id
+    - relative_path
+    - class_id
+    - source_split
+    - sha256
+
+invariants:
+  expected_classes: 200
+  require_class_stratification: true
+  require_every_class_in_each_generated_official_train_split: true
+  require_disjoint_sample_ids: true
+  require_disjoint_content_hashes: true
+  preserve_splits_between_experiments: true
+  calibration_must_not_use_test: true
+  validation_labels_source: val_annotations.txt
+  fail_on_corrupt_image: true
+  fail_on_unknown_label: true

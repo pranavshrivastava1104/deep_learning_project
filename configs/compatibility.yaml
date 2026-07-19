@@ -1,0 +1,82 @@
+schema_version: 1
+status: phase_01_resolved_runtime_validation_pending
+recorded_at_utc: "2026-07-18"
+
+python:
+  version: 3.11.15
+  requires_python: ">=3.11,<3.12"
+  architecture: x86_64
+  implementation: CPython
+  pin_file: .python-version
+
+dependency_management:
+  tool: uv
+  version: 0.11.17
+  project_file: pyproject.toml
+  lock_file: uv.lock
+  direct_dependencies_exactly_pinned: true
+  transitive_dependencies_locked: true
+  requirement_exports_generated_from_lock: true
+
+pytorch:
+  torch_version: 2.13.0
+  torchvision_version: 0.28.0
+  pair_resolution_status: resolved
+  python_3_11_wheels_available: true
+
+colab_cuda:
+  torch_distribution: pypi_default_linux
+  cuda_runtime_reported_by_torch: null
+  cudnn_version: null
+  gpu_model: null
+  driver_version: null
+  validation_status: pending_00_runtime_check_notebook
+  promotion_behavior_when_unverified: development_only
+
+onnx:
+  version: 1.22.0
+  opset: 18
+  export_validation_status: pending_phase_06
+
+onnxruntime:
+  cpu_version: 1.27.0
+  local_execution_provider: CPUExecutionProvider
+  cuda_package_version: null
+  cuda_execution_provider: CUDAExecutionProvider
+  cuda_validation_status: pending_portable_gpu_profile
+
+openclip:
+  package: open_clip_torch
+  version: 3.3.0
+  source_revision: v3.3.0
+  model_architecture: ViT-B-32
+  pretrained_tag: openai
+
+tensorrt:
+  version: null
+  cuda_version: null
+  target_gpu: null
+  status: target_gpu_only
+  engine_portability: target_specific
+  missing_target_environment_behavior: block_tensorrt_build_and_promotion
+
+profiles:
+  local_cpu:
+    python: 3.11.15
+    onnxruntime: 1.27.0
+    provider: CPUExecutionProvider
+    validation_status: dependency_resolution_passed
+  colab_gpu:
+    python: 3.11.15
+    torch: 2.13.0
+    torchvision: 0.28.0
+    validation_status: pending_colab_runtime_report
+  target_gpu:
+    validation_status: pending_hardware_assignment
+
+change_policy:
+  require_lock_regeneration: true
+  require_requirement_reexport: true
+  require_environment_report: true
+  require_runtime_parity_tests_for_ml_stack_change: true
+  prohibit_independent_torch_or_torchvision_upgrade: true

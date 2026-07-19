@@ -1,0 +1,80 @@
+schema_version: 1
+task: similarity
+
+identity:
+  model_name: openclip-vit-b32
+  semantic_version: 0.1.0
+  embedding_namespace: openclip-vit-b32-0.1.0
+  lifecycle_state: experiment
+
+implementation:
+  provider: open_clip
+  package: open_clip_torch
+  package_version: 3.3.0
+  architecture: ViT-B-32
+  pretrained_tag: openai
+  source_url: https://github.com/mlfoundations/open_clip
+  source_revision: v3.3.0
+  code_license: MIT
+
+pretrained_weights:
+  resolved_source_url: null
+  sha256: null
+  license_review_status: pending
+  missing_integrity_or_license_behavior: block_candidate_registration
+
+data:
+  config: configs/data/similarity_gallery.yaml
+  dataset_name: similarity-gallery
+
+training:
+  decision: pretrained_encoder_only
+  fine_tune: false
+  gpu_embedding_location: google_colab
+  selection_metric: recall_at_5
+
+input:
+  tensor_name: images
+  dtype: float32
+  layout: NCHW
+  color_mode: RGB
+  shape: [null, 3, 224, 224]
+
+serving_preprocessing:
+  exif_orientation: normalize
+  resize_shorter_side: 224
+  center_crop: [224, 224]
+  interpolation: bicubic
+  scale_to_unit_interval: true
+  normalization:
+    mean: [0.48145466, 0.4578275, 0.40821073]
+    std: [0.26862954, 0.26130258, 0.27577711]
+
+output:
+  tensor_name: image_embedding
+  embedding_dimension: 512
+  normalization: l2
+  distance_function: cosine
+  cross_version_comparison: forbidden
+
+retrieval:
+  store: postgresql_pgvector
+  exact_search_for_initial_gallery: true
+  approximate_index_requires_recall_benchmark: true
+  namespace_field: embedding_namespace
+
+export:
+  portable_format: onnx
+  opset: 18
+  dynamic_axes:
+    batch: true
+    spatial: false
+  target_profiles:
+    - local_cpu
+    - gpu_onnx
+    - gpu_tensorrt
+
+quantization:
+  candidate: static_int8_where_supported
+  calibration_manifest: data/manifests/similarity-gallery/v1/calibration.jsonl
+  promotion_gate: configs/acceptance.yaml

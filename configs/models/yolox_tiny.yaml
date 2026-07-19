@@ -1,0 +1,80 @@
+schema_version: 1
+task: detection
+
+identity:
+  model_name: yolox-tiny
+  semantic_version: 0.1.0
+  lifecycle_state: experiment
+
+implementation:
+  provider: official_yolox
+  architecture: YOLOX-Tiny
+  source_url: https://github.com/Megvii-BaseDetection/YOLOX
+  source_revision: v0.3.0
+  code_license: Apache-2.0
+
+pretrained_weights:
+  identifier: yolox_tiny.pth
+  source_url: null
+  sha256: null
+  training_dataset: COCO
+  license_review_status: pending
+  missing_integrity_or_license_behavior: block_candidate_registration
+
+data:
+  config: configs/data/coco_subset.yaml
+  dataset_name: coco-2017
+  number_of_classes: 80
+
+training:
+  decision: pretrained_baseline_only
+  fine_tune_only_if: documented_domain_gap_and_approved_change
+  execution_location: google_colab
+  selection_metric: map_50_95
+
+input:
+  tensor_name: images
+  dtype: float32
+  layout: NCHW
+  color_mode: BGR
+  value_range: [0.0, 255.0]
+  shape: [null, 3, 640, 640]
+
+serving_preprocessing:
+  exif_orientation: normalize
+  decoder_color_mode: RGB
+  model_color_mode: BGR
+  channel_conversion: RGB_to_BGR
+  resize: letterbox
+  target_size: [640, 640]
+  pad_value: 114
+  interpolation: bilinear
+  output_dtype: float32
+  scale_to_unit_interval: false
+  normalization: none
+
+output:
+  exported_graph: raw_boxes_objectness_and_class_scores
+  coordinate_contract: xyxy_pixels_in_exif_normalized_original_image
+  postprocessing_location: shared_versioned_python_module
+  postprocessing:
+    confidence_threshold: 0.25
+    iou_threshold: 0.45
+    maximum_detections: 100
+    nms: class_aware
+
+export:
+  portable_format: onnx
+  opset: 18
+  dynamic_axes:
+    batch: true
+    spatial: false
+  target_profiles:
+    - local_cpu
+    - gpu_onnx
+    - gpu_tensorrt
+
+quantization:
+  candidate: static_int8
+  calibration_manifest: data/manifests/coco-2017/v1/calibration.jsonl
+  promotion_gate: configs/acceptance.yaml

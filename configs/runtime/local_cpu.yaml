@@ -1,0 +1,41 @@
+schema_version: 1
+profile_name: local_cpu
+status: supported_default
+
+serving:
+  application: fastapi
+  gateway: nginx_in_deployed_profile
+  device: cpu
+  synchronous_deadline_seconds: 30
+
+runtime:
+  adapter: onnxruntime
+  execution_providers:
+    - CPUExecutionProvider
+  precision_preference:
+    - int8_if_quality_gate_passed
+    - fp32
+  model_bundle_root: artifacts/models
+  load_once_during_lifespan: true
+  warmup_before_readiness: true
+  bounded_concurrency: true
+  concurrency_limit: null
+  concurrency_limit_behavior: require_benchmark_before_production
+
+fallback:
+  enabled: false
+  semantic_model_change_allowed: false
+
+dependencies:
+  cache_and_rate_limit: redis
+  durable_state: postgresql
+  similarity_store: pgvector
+  batch_worker: celery_cpu
+
+promotion_requirements:
+  - checksum_verified
+  - manifest_schema_verified
+  - onnx_cpu_parity_passed
+  - quality_gate_passed
+  - golden_api_smoke_passed
+  - p95_threshold_measured
