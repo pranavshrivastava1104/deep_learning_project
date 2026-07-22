@@ -21,6 +21,13 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+data = [
+    "pillow==12.3.0",
+    "pycocotools==2.0.11",
+    "pyyaml==6.0.3",
+    "requests==2.34.2",
+    "tqdm==4.69.0",
+]
 dev = [
     "mypy==2.3.0",
     "pre-commit==4.6.0",

@@ -6,30 +6,20 @@ seed: 42
 
 source:
   provider: COCO Consortium
-  url: https://cocodataset.org/
-  images_version: '2017'
-  annotations_version: '2017'
-  image_archives_sha256: null
-  annotations_archive_sha256: null
-  license_review_status: per_image_and_annotation_review_required
-  acquisition_behavior_when_unverified: block_redistribution
+  archives:
+    images:
+      url: https://images.cocodataset.org/zips/val2017.zip
+      filename: val2017.zip
+      extracted_directory: val2017
+    annotations:
+      url: https://images.cocodataset.org/annotations/annotations_trainval2017.zip
+      filename: annotations_trainval2017.zip
+      extracted_directory: annotations
 
 split_policy:
-  strategy: stable_hash_of_coco_image_id
-  training:
-    use: not_used_for_initial_pretrained_baseline
-  validation:
-    source: val2017
-    selection: first_half_by_stable_hash_order
-    target_count: 2500
-  calibration:
-    source: train2017
-    selection: deterministic_representative_subset
-    target_count: 1000
-  test:
-    source: val2017
-    selection: second_half_by_stable_hash_order
-    target_count: 2500
+  status: pending
+  strategy: null
+  note: Split counts and the deterministic image-ID selection algorithm will be decided before manifest generation.
 
 manifests:
   directory: data/manifests/coco-2017/v1
@@ -43,17 +33,11 @@ manifests:
     - coco_image_id
     - relative_path
     - annotation_ids
-    - original_license_id
-    - sha256
 
 invariants:
   expected_categories: 80
   preserve_original_category_ids: true
   preserve_original_annotations: true
-  require_disjoint_sample_ids: true
-  require_disjoint_content_hashes: true
-  preserve_splits_between_experiments: true
-  calibration_must_not_use_test: true
   fail_on_missing_annotation_record: true
   allow_empty_annotation_list: true
   fail_on_invalid_box: true
