@@ -93,7 +93,7 @@ DATASETS: dict[str, DatasetSpec] = {
     ),
     "coco_val2017": DatasetSpec(
         name="coco_val2017",
-        url="https://images.cocodataset.org/zips/val2017.zip",
+        url="https://s3.amazonaws.com/images.cocodataset.org/zips/val2017.zip",
         filename="val2017.zip",
         archive_directory="val2017",
         extracted_directory="val2017",
@@ -102,7 +102,7 @@ DATASETS: dict[str, DatasetSpec] = {
     "coco_annotations": DatasetSpec(
         name="coco_annotations",
         url=(
-            "https://images.cocodataset.org/"
+            "https://s3.amazonaws.com/images.cocodataset.org/"
             "annotations/annotations_trainval2017.zip"
         ),
         filename="annotations_trainval2017.zip",
