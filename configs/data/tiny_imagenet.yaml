@@ -12,9 +12,20 @@ source:
     extracted_directory: tiny-imagenet-200
 
 split_policy:
-  status: pending
-  strategy: null
-  note: Split counts and the deterministic splitting algorithm will be decided before manifest generation.
+  status: approved
+  strategy: class_stratified_stable_hash
+  training:
+    source: official_train
+    fraction: 0.90
+  validation:
+    source: official_train
+    fraction: 0.05
+  calibration:
+    source: official_train
+    fraction: 0.05
+  test:
+    source: official_validation
+    fraction: 1.0
 
 manifests:
   directory: data/manifests/tiny-imagenet/v1

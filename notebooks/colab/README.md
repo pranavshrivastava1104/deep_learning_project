@@ -28,3 +28,10 @@ contain its own SHA:
 In Colab, select **Runtime > Change runtime type > GPU** before running all cells.
 The notebook contains no credentials; a private repository must be authenticated by a
 separate secure Colab mechanism.
+
+## Phase 2 data preparation
+
+01_data_prepare.ipynb downloads the real Phase 2 datasets into Colab's temporary
+/content/data, validates them, generates the approved dataset splits, and writes
+small versioned manifests under data/manifests/ in the checked-out repository.
+It follows the current main branch and does not require Git SHA pinning.
