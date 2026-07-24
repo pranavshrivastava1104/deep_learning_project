@@ -8,18 +8,26 @@ source:
   provider: COCO Consortium
   archives:
     images:
-      url: https://images.cocodataset.org/zips/val2017.zip
+      url: https://s3.amazonaws.com/images.cocodataset.org/zips/val2017.zip
       filename: val2017.zip
       extracted_directory: val2017
     annotations:
-      url: https://images.cocodataset.org/annotations/annotations_trainval2017.zip
+      url: https://s3.amazonaws.com/images.cocodataset.org/annotations/annotations_trainval2017.zip
       filename: annotations_trainval2017.zip
       extracted_directory: annotations
 
 split_policy:
-  status: pending
-  strategy: null
-  note: Split counts and the deterministic image-ID selection algorithm will be decided before manifest generation.
+  status: approved
+  strategy: seeded_stable_hash_of_image_id
+  calibration:
+    source: val2017
+    target_count: 500
+  validation:
+    source: val2017
+    target_count: 1000
+  test:
+    source: val2017
+    target_count: 3500
 
 manifests:
   directory: data/manifests/coco-2017/v1

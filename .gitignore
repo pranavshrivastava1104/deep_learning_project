@@ -31,7 +31,9 @@ htmlcov/
 /artifacts/
 /checkpoints/
 /mlruns/
-/data/
+/data/*
+!/data/manifests/
+!/data/manifests/**
 *.log
 
 # Model artifacts belong in artifact storage

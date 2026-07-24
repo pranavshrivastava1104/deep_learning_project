@@ -12,9 +12,14 @@ source:
     extracted_directory: imagenet-sample-images
 
 split_policy:
-  status: pending
-  strategy: null
-  note: Calibration, query, and gallery counts and their deterministic assignment algorithm will be decided before manifest generation.
+  status: approved
+  strategy: seeded_stable_hash_of_source_path
+  calibration:
+    source_fraction: 0.10
+  retrieval:
+    source: remaining_images
+    gallery_item: original_image
+    query_item: deterministic_transformation
 
 ground_truth:
   format: explicit_positive_pairs
